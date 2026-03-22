@@ -201,32 +201,42 @@ impl Renderer {
         size_info: &SizeInfo,
         glyph_cache: &mut GlyphCache,
     ) {
-        let mut wide_char_spacer = false;
-        let cells = string_chars.enumerate().filter_map(|(i, character)| {
-            let flags = if wide_char_spacer {
-                wide_char_spacer = false;
-                return None;
-            } else if character.width() == Some(2) {
-                // The spacer is always following the wide char.
-                wide_char_spacer = true;
-                Flags::WIDE_CHAR
-            } else {
-                Flags::empty()
-            };
-
-            Some(RenderableCell {
-                point: Point::new(point.line, point.column + i),
+        let mut column_offset = 0;
+        let mut cells = Vec::new();
+        
+        for character in string_chars {
+            let char_width = character.width().unwrap_or(1);
+            
+            // Create cell for the character.
+            cells.push(RenderableCell {
+                point: Point::new(point.line, point.column + column_offset),
                 character,
                 extra: None,
-                flags,
+                flags: if char_width == 2 { Flags::WIDE_CHAR } else { Flags::empty() },
                 bg_alpha: 1.0,
                 fg,
                 bg,
                 underline: fg,
-            })
-        });
+            });
+            
+            // If wide char, also create a spacer cell.
+            if char_width == 2 {
+                cells.push(RenderableCell {
+                    point: Point::new(point.line, point.column + column_offset + 1),
+                    character: ' ',  // Spacer is a space character
+                    extra: None,
+                    flags: Flags::WIDE_CHAR_SPACER,
+                    bg_alpha: 1.0,
+                    fg,
+                    bg,
+                    underline: fg,
+                });
+            }
+            
+            column_offset += char_width;
+        }
 
-        self.draw_cells(size_info, glyph_cache, cells);
+        self.draw_cells(size_info, glyph_cache, cells.into_iter());
     }
 
     pub fn with_loader<F, T>(&mut self, func: F) -> T

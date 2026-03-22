@@ -26,6 +26,8 @@ use crate::vte::ansi::{
     StandardCharset,
 };
 
+pub mod buffer_fuzzy_search;
+pub mod buffer_search;
 pub mod cell;
 pub mod color;
 pub mod search;
@@ -72,11 +74,12 @@ bitflags! {
         const ALTERNATE_SCROLL        = 1 << 15;
         const VI                      = 1 << 16;
         const URGENCY_HINTS           = 1 << 17;
-        const DISAMBIGUATE_ESC_CODES  = 1 << 18;
-        const REPORT_EVENT_TYPES      = 1 << 19;
-        const REPORT_ALTERNATE_KEYS   = 1 << 20;
-        const REPORT_ALL_KEYS_AS_ESC  = 1 << 21;
-        const REPORT_ASSOCIATED_TEXT  = 1 << 22;
+        const BUFFER_FUZZY_SEARCH     = 1 << 18;
+        const DISAMBIGUATE_ESC_CODES  = 1 << 19;
+        const REPORT_EVENT_TYPES      = 1 << 20;
+        const REPORT_ALTERNATE_KEYS   = 1 << 21;
+        const REPORT_ALL_KEYS_AS_ESC  = 1 << 22;
+        const REPORT_ASSOCIATED_TEXT  = 1 << 23;
         const MOUSE_MODE              = Self::MOUSE_REPORT_CLICK.bits() | Self::MOUSE_MOTION.bits() | Self::MOUSE_DRAG.bits();
         const KITTY_KEYBOARD_PROTOCOL = Self::DISAMBIGUATE_ESC_CODES.bits()
                                       | Self::REPORT_EVENT_TYPES.bits()
@@ -272,6 +275,9 @@ pub struct Term<T> {
     /// Cursor for keyboard selection.
     pub vi_mode_cursor: ViModeCursor,
 
+    /// Buffer fuzzy search state.
+    pub buffer_fuzzy_search_state: buffer_fuzzy_search::BufferSearchState,
+
     pub selection: Option<Selection>,
 
     /// Currently active grid.
@@ -434,6 +440,7 @@ impl<T> Term<T> {
             keyboard_mode_stack: Default::default(),
             active_charset: Default::default(),
             vi_mode_cursor: Default::default(),
+            buffer_fuzzy_search_state: buffer_fuzzy_search::BufferSearchState::new(),
             cursor_style: Default::default(),
             colors: color::Colors::default(),
             title_stack: Default::default(),
@@ -832,6 +839,205 @@ impl<T> Term<T> {
 
         // Update UI about cursor blinking state changes.
         self.event_proxy.send_event(Event::CursorBlinkingChange);
+    }
+
+    /// Start buffer fuzzy search mode.
+    #[inline]
+    pub fn start_buffer_fuzzy_search(&mut self, max_display: usize)
+    where
+        T: EventListener,
+    {
+        self.mode.insert(TermMode::BUFFER_FUZZY_SEARCH);
+        self.buffer_fuzzy_search_state.activate(max_display);
+        
+        // Phase 4: Immediately populate matches with all non-empty lines.
+        self.update_buffer_fuzzy_search_matches();
+        
+        // Send event to notify UI about state change.
+        self.event_proxy.send_event(Event::BufferFuzzySearchStateChange);
+        log::debug!("Buffer search started (case_sensitive={})", self.buffer_fuzzy_search_state.is_case_sensitive());
+    }
+    
+    /// Update search configuration (case sensitivity from config file).
+    #[inline]
+    pub fn buffer_fuzzy_search_update_config(&mut self, config: buffer_search::SearchConfig)
+    where
+        T: EventListener,
+    {
+        self.buffer_fuzzy_search_state.update_config(config);
+        self.update_buffer_fuzzy_search_matches();
+        self.event_proxy.send_event(Event::BufferFuzzySearchStateChange);
+    }
+    
+    /// Get case sensitivity status.
+    #[inline]
+    pub fn buffer_fuzzy_search_is_case_sensitive(&self) -> bool {
+        self.buffer_fuzzy_search_state.is_case_sensitive()
+    }
+
+    /// Cancel buffer fuzzy search mode.
+    #[inline]
+    pub fn cancel_buffer_fuzzy_search(&mut self)
+    where
+        T: EventListener,
+    {
+        self.mode.remove(TermMode::BUFFER_FUZZY_SEARCH);
+        self.buffer_fuzzy_search_state.deactivate();
+        
+        // Send event to notify UI about state change.
+        self.event_proxy.send_event(Event::BufferFuzzySearchStateChange);
+    }
+
+    /// Input a character to buffer fuzzy search query.
+    #[inline]
+    pub fn buffer_fuzzy_search_input(&mut self, c: char)
+    where
+        T: EventListener,
+    {
+        if self.mode.contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            self.buffer_fuzzy_search_state.input(c);
+            self.event_proxy.send_event(Event::BufferFuzzySearchQueryUpdate);
+        }
+    }
+
+    /// Handle backspace in buffer fuzzy search mode.
+    #[inline]
+    pub fn buffer_fuzzy_search_backspace(&mut self)
+    where
+        T: EventListener,
+    {
+        if self.mode.contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            self.buffer_fuzzy_search_state.backspace();
+            self.event_proxy.send_event(Event::BufferFuzzySearchQueryUpdate);
+        }
+    }
+
+    /// Get the current buffer fuzzy search query.
+    #[inline]
+    pub fn buffer_fuzzy_search_query(&self) -> &str {
+        self.buffer_fuzzy_search_state.query()
+    }
+
+    /// Check if buffer fuzzy search is active.
+    #[inline]
+    pub fn buffer_fuzzy_search_active(&self) -> bool {
+        self.buffer_fuzzy_search_state.is_active()
+    }
+
+    // ========== Phase 2 Methods ==========
+
+    /// Update buffer fuzzy search matches.
+    #[inline]
+    pub fn update_buffer_fuzzy_search_matches(&mut self)
+    where
+        T: EventListener,
+    {
+        if !self.mode.contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            return;
+        }
+
+        // Extract searchable content from grid.
+        let search_lines = buffer_search::BufferExtractor::extract(&self.grid);
+
+        // Update matches.
+        self.buffer_fuzzy_search_state.update_matches(&search_lines);
+
+        // Send event to notify UI.
+        self.event_proxy.send_event(Event::BufferFuzzySearchMatchesUpdate);
+    }
+
+    /// Get buffer fuzzy search matches.
+    #[inline]
+    pub fn buffer_fuzzy_search_matches(&self) -> &[buffer_fuzzy_search::Match] {
+        &self.buffer_fuzzy_search_state.matches
+    }
+
+    /// Get selected match index.
+    #[inline]
+    pub fn buffer_fuzzy_search_selected_index(&self) -> usize {
+        self.buffer_fuzzy_search_state.selected_index
+    }
+
+    /// Select previous match.
+    #[inline]
+    pub fn buffer_fuzzy_search_select_previous(&mut self)
+    where
+        T: EventListener,
+    {
+        self.buffer_fuzzy_search_state.select_previous();
+        self.event_proxy.send_event(Event::BufferFuzzySearchSelectionUpdate);
+    }
+
+    /// Select next match.
+    #[inline]
+    pub fn buffer_fuzzy_search_select_next(&mut self)
+    where
+        T: EventListener,
+    {
+        self.buffer_fuzzy_search_state.select_next();
+        self.event_proxy.send_event(Event::BufferFuzzySearchSelectionUpdate);
+    }
+
+    /// Get selected match line number.
+    #[inline]
+    pub fn buffer_fuzzy_search_selected_line(&self) -> Option<usize> {
+        self.buffer_fuzzy_search_state.selected_match().map(|m| m.line_number)
+    }
+    
+    /// Get selected match.
+    #[inline]
+    pub fn buffer_fuzzy_search_selected_match(&self) -> Option<&buffer_fuzzy_search::Match> {
+        self.buffer_fuzzy_search_state.selected_match()
+    }
+    
+    /// Get visible matches (considering scroll offset).
+    #[inline]
+    pub fn buffer_fuzzy_search_visible_matches(&self) -> &[buffer_fuzzy_search::Match] {
+        self.buffer_fuzzy_search_state.visible_matches()
+    }
+    
+    /// Get scroll offset.
+    #[inline]
+    pub fn buffer_fuzzy_search_scroll_offset(&self) -> usize {
+        self.buffer_fuzzy_search_state.scroll_offset()
+    }
+
+    // ========== Phase 4.1: Multi-select Methods ==========
+
+    /// Toggle selection for current match.
+    #[inline]
+    pub fn buffer_fuzzy_search_toggle_selection(&mut self) {
+        self.buffer_fuzzy_search_state.toggle_selection();
+    }
+
+    /// Select all matches.
+    #[inline]
+    pub fn buffer_fuzzy_search_select_all(&mut self) {
+        self.buffer_fuzzy_search_state.select_all();
+    }
+
+    /// Get all selected items' content.
+    #[inline]
+    pub fn buffer_fuzzy_search_get_selected_content(&self) -> Vec<String> {
+        self.buffer_fuzzy_search_state.get_selected_content()
+    }
+
+    /// Get count of selected items.
+    #[inline]
+    pub fn buffer_fuzzy_search_selected_count(&self) -> usize {
+        self.buffer_fuzzy_search_state.selected_count()
+    }
+
+    /// Check if current match is selected.
+    #[inline]
+    pub fn buffer_fuzzy_search_is_current_selected(&self) -> bool {
+        self.buffer_fuzzy_search_state.is_current_selected()
+    }
+
+    /// Get reference to selected items set (for UI rendering).
+    #[inline]
+    pub fn buffer_fuzzy_search_get_selected_items(&self) -> &std::collections::HashSet<usize> {
+        &self.buffer_fuzzy_search_state.selected_items
     }
 
     /// Move vi mode cursor.

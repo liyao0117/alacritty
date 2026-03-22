@@ -82,3 +82,173 @@ that.
 Alacritty supports running multiple terminal emulators from the same Alacritty
 instance. New windows can be created either by using the `CreateNewWindow`
 keybinding action, or by executing the `alacritty msg create-window` subcommand.
+
+## Buffer Fuzzy Search
+
+Buffer Fuzzy Search provides powerful, fuzzy-matching-based search for your terminal's scrollback buffer. It allows you to quickly find and filter lines using intelligent pattern matching, with support for multiple match modes, multi-selection, and column filtering.
+
+### Activating Buffer Fuzzy Search
+
+**Default Keybinding:** <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>T</kbd>
+
+Press the keybinding to toggle Buffer Fuzzy Search mode. When active, you'll see a prompt at the bottom showing `Fuzzy: <query>` with match count.
+
+**Exit:** Press <kbd>Escape</kbd> or press the toggle keybinding again to exit.
+
+### Basic Usage
+
+1. **Activate:** Press <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>T</kbd>
+2. **Type Query:** Start typing your search query
+3. **Navigate Results:**
+   - <kbd>↑</kbd> / <kbd>↓</kbd> or <kbd>Ctrl</kbd> <kbd>P</kbd> / <kbd>Ctrl</kbd> <kbd>N</kbd>: Move selection up/down
+   - <kbd>Page Up</kbd> / <kbd>Page Down</kbd>: Scroll by page
+   - <kbd>Home</kbd> / <kbd>End</kbd>: Jump to first/last result
+4. **Jump to Line:** Press <kbd>Enter</kbd> to jump to the selected line in the terminal
+5. **Copy Content:** Press <kbd>Ctrl</kbd> <kbd>C</kbd> to copy selected line(s) to clipboard
+
+### Match Modes
+
+Buffer Fuzzy Search uses nucleo-matcher's native pattern syntax for different match modes:
+
+| Pattern | Mode | Description | Example |
+|---------|------|-------------|---------|
+| `foo` | Fuzzy (default) | Matches characters in order, not necessarily contiguous | `fz` matches "fuzzy search" |
+| `'foo` | Substring | Matches exact contiguous substring | `'error` matches "error" but not "err_or" |
+| `^foo` | Prefix | Matches lines starting with foo | `^git` matches "git commit" |
+| `foo$` | Postfix | Matches lines ending with foo | `rs$` matches "main.rs" |
+| `^foo$` | Exact | Matches lines exactly equal to foo | `^foo$` matches only "foo" |
+
+### Case Sensitivity
+
+Toggle case-sensitive matching:
+
+- **Default:** Case-insensitive (matches "Hello", "hello", "HELLO")
+- **Toggle:** Press <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd> to toggle case sensitivity
+- **Indicator:** `Aa` (case-sensitive) or `aa` (case-insensitive) shown in prompt
+
+### Multi-Select Mode (Phase 4)
+
+Select and copy multiple lines at once:
+
+- **Toggle Selection:** <kbd>Tab</kbd> - Toggle selection for current line
+- **Select All:** <kbd>Ctrl</kbd> <kbd>A</kbd> - Select/deselect all visible results
+- **Copy Selected:** <kbd>Ctrl</kbd> <kbd>C</kbd> - Copy all selected lines to clipboard
+- **Visual Indicator:** Selected lines are highlighted with a different background color
+
+### Column Filtering (Phase 4.3)
+
+Filter search by specific columns when output has structured data:
+
+Configure in `alacritty.toml`:
+```toml
+[buffer_search]
+# Column delimiter (e.g., ":", " ", "\t")
+delimiter = ":"
+
+# Search specific columns (1-based indices)
+# Empty means search entire line
+nth = [1, 3]  # Search only columns 1 and 3
+```
+
+### Configuration Options
+
+Add to your `alacritty.toml`:
+
+```toml
+# Buffer Search configuration
+[buffer_search]
+
+# Toggle case sensitivity (default: false)
+case_sensitive = false
+
+# Custom toggle keybinding (default: "Ctrl+Shift+T")
+# Format: "Modifiers+Key"
+# Modifiers: Ctrl, Shift, Alt, Super (Win/Command)
+toggle_key = "Ctrl+Shift+T"
+
+# Column filtering
+# Delimiter for splitting columns
+delimiter = ":"
+
+# Column indices to search (1-based, empty = search all)
+nth = [1, 2]
+```
+
+### Custom Keybindings
+
+You can also configure the toggle keybinding using the traditional `keyboard.bindings` approach:
+
+```toml
+[[keyboard.bindings]]
+key = "T"
+mods = "Control|Shift"
+action = "StartBufferFuzzySearch"
+```
+
+### Example Workflows
+
+#### Find Error Messages
+```
+1. Press Ctrl+Shift+T
+2. Type: error
+3. Navigate with ↑/↓
+4. Press Enter to jump to the line
+```
+
+#### Find Git Commands (Prefix Match)
+```
+1. Press Ctrl+Shift+T
+2. Type: ^git
+3. Only lines starting with "git" are shown
+```
+
+#### Find Rust Files (Postfix Match)
+```
+1. Press Ctrl+Shift+T
+2. Type: .rs$
+3. Only lines ending with ".rs" are shown
+```
+
+#### Copy Multiple Log Lines
+```
+1. Press Ctrl+Shift+T
+2. Type: ERROR
+3. Press Tab on each error line to select
+4. Press Ctrl+C to copy all selected lines
+```
+
+#### Exact Command Search
+```
+1. Press Ctrl+Shift+T
+2. Type: ^cargo build$
+3. Only exact "cargo build" commands are shown
+```
+
+### Tips
+
+- **Empty Query:** When query is empty, all non-empty lines are shown
+- **Wrap-Around Navigation:** Navigation wraps around (last → first, first → last)
+- **IME Support:** IME input is supported for non-English queries
+- **Performance:** Results are sorted by match score (best matches first)
+- **Scrollback:** Searches entire scrollback buffer, not just visible content
+
+### Troubleshooting
+
+**Keybinding not working?**
+- Check for conflicts with other applications or system shortcuts
+- Verify configuration file syntax
+- Try restarting Alacritty
+
+**No matches found?**
+- Try a shorter or more general query
+- Check if case sensitivity is enabled (toggle with Ctrl+Shift+C)
+- Verify you're searching the correct buffer content
+
+**Slow performance with large buffers?**
+- Use more specific queries to reduce result count
+- Consider using prefix/substring modes for faster matching
+
+---
+
+Buffer Fuzzy Search is powered by [nucleo-matcher](https://github.com/helix-editor/nucleo), providing fast and intelligent fuzzy matching optimized for terminal workflows.
+.

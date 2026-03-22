@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::fmt::{self, Debug, Formatter};
-use std::process::ExitStatus;
 use std::sync::Arc;
 
 use crate::term::ClipboardType;
@@ -54,8 +53,20 @@ pub enum Event {
     /// Shutdown request.
     Exit,
 
-    /// Child process exited.
-    ChildExit(ExitStatus),
+    /// Child process exited with an error code.
+    ChildExit(i32),
+
+    /// Buffer fuzzy search state changed (activated/deactivated).
+    BufferFuzzySearchStateChange,
+
+    /// Buffer fuzzy search query updated.
+    BufferFuzzySearchQueryUpdate,
+
+    /// Buffer fuzzy search matches updated (Phase 2).
+    BufferFuzzySearchMatchesUpdate,
+
+    /// Buffer fuzzy search selection updated (Phase 2).
+    BufferFuzzySearchSelectionUpdate,
 }
 
 impl Debug for Event {
@@ -73,7 +84,11 @@ impl Debug for Event {
             Event::Wakeup => write!(f, "Wakeup"),
             Event::Bell => write!(f, "Bell"),
             Event::Exit => write!(f, "Exit"),
-            Event::ChildExit(status) => write!(f, "ChildExit({status:?})"),
+            Event::ChildExit(code) => write!(f, "ChildExit({code})"),
+            Event::BufferFuzzySearchStateChange => write!(f, "BufferFuzzySearchStateChange"),
+            Event::BufferFuzzySearchQueryUpdate => write!(f, "BufferFuzzySearchQueryUpdate"),
+            Event::BufferFuzzySearchMatchesUpdate => write!(f, "BufferFuzzySearchMatchesUpdate"),
+            Event::BufferFuzzySearchSelectionUpdate => write!(f, "BufferFuzzySearchSelectionUpdate"),
         }
     }
 }

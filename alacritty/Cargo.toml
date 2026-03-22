@@ -12,7 +12,8 @@ rust-version.workspace = true
 
 [dependencies.alacritty_terminal]
 path = "../alacritty_terminal"
-version = "0.26.1-dev"
+# version = "0.26.1-dev"
+version = "0.25.2-dev"
 
 [dependencies.alacritty_config_derive]
 path = "../alacritty_config_derive"

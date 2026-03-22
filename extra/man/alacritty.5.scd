@@ -625,6 +625,48 @@ Windows: _"powershell"_
 
 	Default: _"OnlyCopy"_
 
+# BUFFER SEARCH
+
+This section documents the *[buffer_search]* table of the configuration file.
+
+*toggle_key* = _"<string>"_
+
+	Keybinding to toggle Buffer Fuzzy Search mode on/off.
+
+	The format is the same as _keyboard.bindings.key_ with optional modifiers.
+	Modifiers can be _"Control"_, _"Shift"_, _"Alt"_, or _"Super"_, combined with _|_.
+
+	Default: _"Control|Shift|T"_
+
+	Example:
+		*toggle_key* = _"Control|Shift|F"_
+
+*case_sensitive* = _true_ | _false_
+
+	When _true_, search matching is case-sensitive. When _false_, matching ignores case.
+
+	Default: _false_
+
+*delimiter* = _"<string>"_
+
+	Delimiter character used for column-based filtering.
+
+	Common values include _":"_, _" "_, or _"\\t"_.
+
+	Default: _"None"_ (disabled)
+
+*nth* = [_<integer>_,]
+
+	Column indices to search when using column filtering (1-based).
+
+	When empty, the entire line is searched.
+
+	Default: _[]_
+
+	Example:
+		Search only columns 1 and 3:++
+*nth* = [_1_, _3_]
+
 # MOUSE
 
 This section documents the *[mouse]* table of the configuration file.
@@ -853,6 +895,9 @@ _https://docs.rs/winit/latest/winit/keyboard/enum.Key.html#variant.Dead_
 			Start a forward buffer search.
 		*SearchBackward*
 			Start a backward buffer search.
+		*StartBufferFuzzySearch*
+			Toggle buffer fuzzy search mode for intelligent terminal buffer searching.
+			Allows fuzzy-matching, multi-select, and column filtering of scrollback content.
 
 		_Vi mode actions:_
 

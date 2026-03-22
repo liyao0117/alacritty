@@ -66,6 +66,10 @@ configuration. See *alacritty*(5) for full configuration format documentation.
 :  _"Shift"_
 :  _"~Alt"_
 :  _"ScrollToBottom"_
+|  _"T"_
+:  _"Control|Shift"_
+:[
+:  _"StartBufferFuzzySearch"_
 
 ## Vi Mode
 

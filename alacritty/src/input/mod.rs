@@ -127,6 +127,21 @@ pub trait ActionContext<T: EventListener> {
     fn search_active(&self) -> bool;
     fn on_typing_start(&mut self) {}
     fn toggle_vi_mode(&mut self) {}
+    fn start_buffer_fuzzy_search(&mut self) {}
+    fn cancel_buffer_fuzzy_search(&mut self) {}
+    fn buffer_fuzzy_search_input(&mut self, _c: char) {}
+    fn buffer_fuzzy_search_backspace(&mut self) {}
+    fn buffer_fuzzy_search_previous(&mut self) {}
+    fn buffer_fuzzy_search_next(&mut self) {}
+    fn buffer_fuzzy_search_confirm(&mut self) {}
+    fn buffer_fuzzy_search_cancel(&mut self) {}
+    fn update_buffer_fuzzy_search_matches(&mut self) {}
+    fn scroll_to_line(&mut self, _line_number: usize) {}
+    #[allow(dead_code)]
+    fn buffer_fuzzy_search_active(&self) -> bool { false }
+    // Phase 4.1: Multi-select
+    fn buffer_fuzzy_search_toggle_selection(&mut self) {}
+    fn buffer_fuzzy_search_select_all(&mut self) {}
     fn inline_search_state(&mut self) -> &mut InlineSearchState;
     fn start_inline_search(&mut self, _direction: Direction, _stop_short: bool) {}
     fn inline_search_next(&mut self) {}
@@ -177,7 +192,69 @@ impl<T: EventListener> Execute<T> for Action {
             },
             Action::ToggleViMode => {
                 ctx.on_typing_start();
-                ctx.toggle_vi_mode()
+                // If in Buffer Fuzzy Search mode...
+                if ctx.terminal().mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+                    // Phase 4.1: If multi-select has selections, prohibit entering Vi mode.
+                    // User must confirm (Enter) or cancel (Escape) first.
+                    if ctx.terminal().buffer_fuzzy_search_selected_count() > 0 {
+                        log::debug!("ToggleViMode blocked: multi-select has {} selections, must confirm or cancel first", 
+                                    ctx.terminal().buffer_fuzzy_search_selected_count());
+                        return; // Prohibit entering Vi mode
+                    }
+                    
+                    // No multi-selection: cancel search and optionally jump to selected line
+                    if let Some(line_number) = ctx.terminal().buffer_fuzzy_search_selected_line() {
+                        log::debug!("ToggleViMode from Buffer Fuzzy Search: jump to line {}", line_number);
+                        ctx.cancel_buffer_fuzzy_search();
+                        ctx.toggle_vi_mode();
+                        ctx.scroll_to_line(line_number);
+                    } else {
+                        ctx.cancel_buffer_fuzzy_search();
+                        ctx.toggle_vi_mode();
+                    }
+                } else {
+                    ctx.toggle_vi_mode();
+                }
+            },
+            Action::StartBufferFuzzySearch => {
+                // Toggle: if already in buffer fuzzy search mode, cancel it; otherwise start it.
+                if ctx.terminal().mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+                    // Already in BFS mode, cancel it.
+                    log::debug!("StartBufferFuzzySearch: already in BFS mode, cancelling");
+                    ctx.buffer_fuzzy_search_cancel();
+                } else {
+                    // Not in BFS mode, start it.
+                    log::debug!("StartBufferFuzzySearch: not in BFS mode, starting");
+                    ctx.on_typing_start();
+                    // If in Vi mode, cancel it first.
+                    if ctx.terminal().mode().contains(TermMode::VI) {
+                        ctx.toggle_vi_mode();
+                    }
+                    ctx.start_buffer_fuzzy_search();
+                }
+            },
+            Action::CancelBufferFuzzySearch => {
+                // Escape: just cancel search mode, return to normal mode.
+                ctx.buffer_fuzzy_search_cancel();
+            },
+            Action::BufferFuzzySearchBackspace => {
+                ctx.buffer_fuzzy_search_backspace();
+            },
+            Action::BufferFuzzySearchPrevious => {
+                ctx.buffer_fuzzy_search_previous();
+            },
+            Action::BufferFuzzySearchNext => {
+                ctx.buffer_fuzzy_search_next();
+            },
+            Action::BufferFuzzySearchConfirm => {
+                ctx.buffer_fuzzy_search_confirm();
+            },
+            // Phase 4.1: Multi-select
+            Action::BufferFuzzySearchToggleSelection => {
+                ctx.buffer_fuzzy_search_toggle_selection();
+            },
+            Action::BufferFuzzySearchSelectAll => {
+                ctx.buffer_fuzzy_search_select_all();
             },
             action @ (Action::ViMotion(_) | Action::Vi(_))
                 if !ctx.terminal().mode().contains(TermMode::VI) =>

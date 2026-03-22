@@ -800,6 +800,48 @@ impl Display {
         let vi_mode = terminal.mode().contains(TermMode::VI);
         let vi_cursor_point = if vi_mode { Some(terminal.vi_mode_cursor.point) } else { None };
 
+        // Extract buffer fuzzy search state before dropping terminal.
+        // Phase 4.1: Get multi-select state first (immutable borrow).
+        let buffer_fuzzy_search_selected_items = if terminal.mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            let items = terminal.buffer_fuzzy_search_get_selected_items();
+            log::debug!("Buffer fuzzy search selected items count: {}", items.len());
+            Some(items.clone())
+        } else {
+            None
+        };
+        
+        let buffer_fuzzy_search_query = if terminal.mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            Some(terminal.buffer_fuzzy_search_query().to_string())
+        } else {
+            None
+        };
+        let buffer_fuzzy_search_match_count = if terminal.mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            Some(terminal.buffer_fuzzy_search_matches().len())
+        } else {
+            None
+        };
+        let buffer_fuzzy_search_selected_index = if terminal.mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            Some(terminal.buffer_fuzzy_search_selected_index())
+        } else {
+            None
+        };
+        let buffer_fuzzy_search_visible_matches = if terminal.mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            Some(terminal.buffer_fuzzy_search_visible_matches().to_vec())
+        } else {
+            None
+        };
+        let buffer_fuzzy_search_scroll_offset = if terminal.mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            Some(terminal.buffer_fuzzy_search_scroll_offset())
+        } else {
+            None
+        };
+        // Extract case sensitivity before dropping terminal.
+        let buffer_fuzzy_search_case_sensitive = if terminal.mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            Some(terminal.buffer_fuzzy_search_is_case_sensitive())
+        } else {
+            None
+        };
+
         // Add damage from the terminal.
         match terminal.damage() {
             TermDamage::Full => self.damage_tracker.frame().mark_fully_damaged(),
@@ -939,11 +981,21 @@ impl Display {
                 Some(Point::new(line, column))
             },
             None => {
-                let num_lines = self.size_info.screen_lines();
-                match vi_cursor_viewport_point {
-                    None => term::point_to_viewport(display_offset, cursor_point)
-                        .filter(|point| point.line < num_lines),
-                    point => point,
+                // Check if Buffer Fuzzy Search is active.
+                if buffer_fuzzy_search_query.is_some() {
+                    // Position IME at the end of the query string.
+                    let line = size_info.screen_lines();
+                    let query = buffer_fuzzy_search_query.as_ref().unwrap();
+                    let prefix = "Fuzzy: ";
+                    let column = Column(prefix.len() + query.chars().count());
+                    Some(Point::new(line, column))
+                } else {
+                    let num_lines = self.size_info.screen_lines();
+                    match vi_cursor_viewport_point {
+                        None => term::point_to_viewport(display_offset, cursor_point)
+                            .filter(|point| point.line < num_lines),
+                        point => point,
+                    }
                 }
             },
         };
@@ -960,6 +1012,18 @@ impl Display {
                 self.draw_ime_preview(point, fg, bg, &mut rects, config);
             }
         }
+
+        // Draw buffer fuzzy search overlay (Phase 3).
+        self.draw_buffer_fuzzy_search(
+            config,
+            buffer_fuzzy_search_query.as_deref(),
+            buffer_fuzzy_search_match_count,
+            buffer_fuzzy_search_selected_index,
+            buffer_fuzzy_search_visible_matches.as_deref().unwrap_or(&[]),
+            buffer_fuzzy_search_scroll_offset.unwrap_or(0),
+            buffer_fuzzy_search_selected_items,
+            buffer_fuzzy_search_case_sensitive,
+        );
 
         if let Some(message) = message_buffer.message() {
             let search_offset = usize::from(search_state.regex().is_some());
@@ -1323,6 +1387,231 @@ impl Display {
             &self.size_info,
             &mut self.glyph_cache,
         );
+    }
+
+    /// Draw buffer fuzzy search overlay (Phase 3).
+    #[inline(never)]
+    fn draw_buffer_fuzzy_search(
+        &mut self,
+        config: &UiConfig,
+        query: Option<&str>,
+        match_count: Option<usize>,
+        selected_index: Option<usize>,
+        visible_matches: &[alacritty_terminal::term::buffer_fuzzy_search::Match],
+        scroll_offset: usize,
+        selected_items: Option<std::collections::HashSet<usize>>,
+        case_sensitive: Option<bool>,
+    ) {
+        let Some(query) = query else {
+            return;
+        };
+
+        let match_count = match_count.unwrap_or(0);
+        let selected_index = selected_index.unwrap_or(0);
+        let _visible_match_count = visible_matches.len();
+        let _case_sensitive = case_sensitive; // Reserved for future use
+        
+        // Minimal format: "Fuzzy: query" with "(x/N)" right-aligned
+        let count_text = format!("({}/{})", selected_index + 1, match_count);
+        let text = format!("Fuzzy: {}", query);
+
+        // Calculate overlay dimensions - use half of screen height.
+        let screen_lines = self.size_info.screen_lines();
+        let max_results = screen_lines / 2; // Half of terminal height
+        let overlay_height = max_results;
+        let overlay_width = self.size_info.width() as u32;
+        
+        // Input bar is at the last visible line (screen_lines - 1).
+        // Result list is above the input bar.
+        let input_line = screen_lines.saturating_sub(1);
+        let result_start_line = input_line.saturating_sub(overlay_height);
+        
+        // Overlay covers from result_start_line to input_line (inclusive).
+        let overlay_start_y = result_start_line as f32 * self.size_info.cell_height();
+        let overlay_total_height = (overlay_height + 1) as f32 * self.size_info.cell_height();
+        
+        let metrics = self.glyph_cache.font_metrics();
+
+        // Draw semi-transparent background covering entire overlay area.
+        let overlay_bg = config.colors.primary.background;
+        let bg_rect = RenderRect::new(
+            0.,
+            overlay_start_y,
+            self.size_info.width(),
+            overlay_total_height,
+            overlay_bg,
+            0.95,
+        );
+        self.renderer.draw_rects(&self.size_info, &metrics, vec![bg_rect]);
+
+        // Draw result list (top portion of overlay).
+        // fzf/skim style: bright background for selected, subtle indicator for unselected.
+        let bg = config.colors.primary.background;
+        let base_fg = config.colors.primary.foreground;
+        let _normal_fg = base_fg;
+        let _highlight_fg = config.colors.search.matches.foreground.color(base_fg, bg);
+        let result_bg = bg;
+        
+        // fzf-style selection: bright blue/cyan background with white text.
+        let selected_bg = Rgb::new(50, 100, 200); // Bright blue background (fzf-like)
+        let selected_fg_text = Rgb::new(255, 255, 255); // White text
+        
+        // Multi-select checkbox.
+        let checkbox_selected = "* "; // Selected indicator (simple asterisk)
+        let checkbox_empty = "  "; // Empty for unselected
+        
+        // Draw result list using draw_string for both text and background.
+        let columns = self.size_info.columns();
+        
+        // Use bright colors for match highlights to ensure visibility on dark backgrounds.
+        let normal_highlight = Rgb::new(255, 100, 100); // Bright red/pink for unselected matches
+        let selected_highlight = Rgb::new(255, 200, 50); // Yellow/gold for selected matches
+        
+        for (idx, m) in visible_matches.iter().enumerate() {
+            let result_line = result_start_line + idx;
+            let match_idx = scroll_offset + idx;
+            
+            // Check if this is the selected item (cursor position).
+            let is_selected = match_idx == selected_index;
+            
+            // Check if this item is multi-selected (Phase 4.1).
+            let is_multi_selected = selected_items.as_ref().map_or(false, |s| {
+                let result = s.contains(&match_idx);
+                if result {
+                    log::debug!("Match {} is multi-selected", match_idx);
+                }
+                result
+            });
+            
+            // Draw selection indicator and checkbox.
+            let cursor_indicator = if is_selected { ">" } else { " " };
+            let checkbox = if is_multi_selected { checkbox_selected } else { checkbox_empty };
+            let line_num_str = format!("{}{}{:4}: ", cursor_indicator, checkbox, m.line_number);
+            
+            // Draw line number with background.
+            let num_fg = if is_selected { selected_fg_text } else { base_fg };
+            let line_bg = if is_selected { selected_bg } else { result_bg };
+            
+            self.renderer.draw_string(
+                Point::new(result_line, Column(0)),
+                num_fg,
+                line_bg,
+                line_num_str.chars(),
+                &self.size_info,
+                &mut self.glyph_cache,
+            );
+            
+            // Build content string: content + padding to fill line.
+            // Calculate display width considering wide characters (Chinese, emoji, etc.).
+            let content_start_col = line_num_str.chars().count();
+            let content = &m.content;
+            let content_fg = if is_selected { selected_fg_text } else { base_fg };
+            let content_highlight = if is_selected { selected_highlight } else { normal_highlight };
+            
+            // Draw content with highlight.
+            self.draw_highlighted_text(
+                content,
+                &m.highlight_ranges,
+                Point::new(result_line.into(), Column(content_start_col)),
+                content_fg,
+                content_highlight,
+                line_bg,
+            );
+            
+            // Draw padding spaces to fill the rest of the line.
+            // Calculate content display width (wide chars count as 2).
+            use unicode_width::UnicodeWidthChar;
+            let content_display_width: usize = content.chars().map(|c| c.width().unwrap_or(1)).sum();
+            let content_end_col = content_start_col + content_display_width;
+            if content_end_col < columns {
+                let padding_len = columns - content_end_col;
+                let padding_str: String = " ".repeat(padding_len);
+                self.renderer.draw_string(
+                    Point::new(result_line, Column(content_end_col)),
+                    content_fg,
+                    line_bg,
+                    padding_str.chars(),
+                    &self.size_info,
+                    &mut self.glyph_cache,
+                );
+            }
+        }
+
+        // Draw input bar using draw_string for both text and background.
+        let input_fg = config.colors.footer_bar_foreground();
+        let input_bg = config.colors.footer_bar_background();
+        
+        let columns = self.size_info.columns();
+        
+        // Calculate display width considering wide characters.
+        use unicode_width::UnicodeWidthChar;
+        let text_display_width: usize = text.chars().map(|c| c.width().unwrap_or(1)).sum();
+        let count_display_width: usize = count_text.chars().map(|c| c.width().unwrap_or(1)).sum();
+        
+        // Build left part: "> query"
+        let left_part = text.clone();
+        
+        // Build right part: "(x/N)" right-aligned
+        let right_part = count_text.clone();
+        
+        // Calculate padding to fill entire width
+        let padding_len = columns.saturating_sub(text_display_width + count_display_width);
+        
+        // Build full line: left text + padding + right count
+        let mut full_line = left_part;
+        if padding_len > 0 {
+            full_line.push_str(&" ".repeat(padding_len));
+        }
+        full_line.push_str(&right_part);
+        
+        // Draw the entire line (text + spaces + count) with background in one call.
+        self.renderer.draw_string(
+            Point::new(input_line, Column(0)),
+            input_fg,
+            input_bg,
+            full_line.chars(),
+            &self.size_info,
+            &mut self.glyph_cache,
+        );
+
+        // Damage the overlay area for proper redraw.
+        let y = overlay_start_y as i32;
+        let height = overlay_total_height as i32;
+        self.damage_tracker.frame().add_viewport_rect(&self.size_info, 0, y, overlay_width as i32, height);
+        self.damage_tracker.next_frame().add_viewport_rect(&self.size_info, 0, y, overlay_width as i32, height);
+    }
+    
+    /// Draw text with highlighted character positions.
+    #[inline(never)]
+    fn draw_highlighted_text(
+        &mut self,
+        text: &str,
+        highlights: &[usize],
+        point: Point<usize>,
+        normal_fg: Rgb,
+        highlight_fg: Rgb,
+        bg: Rgb,
+    ) {
+        // Draw each character individually with appropriate color.
+        // This ensures perfect alignment between background and text.
+        use unicode_width::UnicodeWidthChar;
+        let mut current_col = point.column.0;
+        for (idx, ch) in text.chars().enumerate() {
+            let fg = if highlights.contains(&idx) { highlight_fg } else { normal_fg };
+            let char_width = ch.width().unwrap_or(1) as usize;
+            let char_point = Point::new(point.line, Column(current_col));
+            
+            self.renderer.draw_string(
+                char_point,
+                fg,
+                bg,
+                std::iter::once(ch),
+                &self.size_info,
+                &mut self.glyph_cache,
+            );
+            
+            current_col += char_width;
+        }
     }
 
     /// Draw render timer.

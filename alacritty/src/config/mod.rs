@@ -162,6 +162,9 @@ pub fn reload(config_path: &Path, options: &mut Options) -> Result<UiConfig> {
 fn after_loading(config: &mut UiConfig, options: &mut Options) {
     // Override config with CLI options.
     options.override_config(config);
+    
+    // Apply buffer search key binding from config.
+    config.apply_buffer_search_binding();
 }
 
 /// Load configuration file and log errors.

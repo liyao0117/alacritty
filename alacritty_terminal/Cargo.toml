@@ -1,6 +1,6 @@
 [package]
 name = "alacritty_terminal"
-version = "0.26.1-dev"
+version = "0.25.2-dev"
 authors = ["Christian Duerr <contact@christianduerr.com>", "Joe Wilm <joe@jwilm.com>"]
 license = "Apache-2.0"
 description = "Library for writing terminal emulators"
@@ -20,6 +20,7 @@ bitflags = "2.4.1"
 home = "0.5.5"
 libc = "0.2"
 log = "0.4"
+nucleo-matcher = "0.3"
 parking_lot = "0.12.0"
 polling = "3.8.0"
 regex-automata = "0.4.3"
@@ -30,7 +31,7 @@ serde = { version = "1", features = ["derive", "rc"], optional = true }
 [target.'cfg(unix)'.dependencies]
 rustix-openpty = "0.2.0"
 rustix = { version = "1.0.0", default-features = false, features = ["std"] }
-signal-hook = "0.4.3"
+signal-hook = "0.3.10"
 
 [target.'cfg(windows)'.dependencies]
 piper = "0.2.1"

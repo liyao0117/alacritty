@@ -1,0 +1,117 @@
+# Alacritty 配置文件
+# 位于 ~/.openclaw/workspace-coder/alacritty-config/alacritty.toml
+
+# ============================================================
+# 窗口设置
+# ============================================================
+[window]
+padding = { x = 10, y = 10 }
+dynamic_title = true
+opacity = 0.95  # 透明度（0.0 完全透明，1.0 不透明）
+
+# [window.dimensions]
+# columns = 134
+# lines = 67
+
+# [window.position]
+# x = 100
+# y = 100
+
+# ============================================================
+# 滚动设置
+# ============================================================
+[scrolling]
+history = 10000
+multiplier = 3
+
+# ============================================================
+# 字体设置
+# ============================================================
+[font]
+normal = { family = "SauceCodePro Nerd Font Mono", style = "Regular" }
+bold = { family = "SauceCodePro Nerd Font Mono", style = "Bold" }
+italic = { family = "SauceCodePro Nerd Font Mono", style = "Italic" }
+bold_italic = { family = "SauceCodePro Nerd Font Mono", style = "Bold Italic" }
+size = 18.0
+
+# ============================================================
+# 颜色主题 (Dracula)
+# ============================================================
+[colors.primary]
+background = "#282a36"
+foreground = "#f8f8f2"
+dim_foreground = "#6272a4"
+bright_foreground = "#ffffff"
+
+[colors.cursor]
+text = "#282a36"
+cursor = "#f8f8f2"
+
+[colors.selection]
+text = "#ffffff"
+background = "#44475a"
+
+[colors.normal]
+black = "#21222c"
+red = "#ff5555"
+green = "#50fa7b"
+yellow = "#f1fa8c"
+blue = "#bd93f9"
+magenta = "#ff79c6"
+cyan = "#8be9fd"
+white = "#f8f8f2"
+
+[colors.bright]
+black = "#6272a4"
+red = "#ff6e6e"
+green = "#69ff94"
+yellow = "#ffffa5"
+blue = "#d6acff"
+magenta = "#ff92df"
+cyan = "#a4ffff"
+white = "#ffffff"
+
+# ============================================================
+# 光标样式
+# ============================================================
+[cursor]
+style = "Block"
+blink_interval = 750
+
+# ============================================================
+# 选中文本自动复制
+# ============================================================
+[selection]
+save_to_clipboard = true
+semantic_escape_chars = ",│`|:\"' ()[]{}<>"
+
+# ============================================================
+# Buffer Fuzzy Search 配置
+# ============================================================
+# 这是本项目新增的功能
+# 注意：enabled 选项已被移除，功能默认启用
+[buffer_search]
+# 触发 buffer fuzzy search 的快捷键 (默认：Ctrl+Shift+T)
+# toggle_key = "Ctrl+Shift+T"
+toggle_key = "Ctrl+Shift+T"
+# 搜索是否区分大小写
+case_sensitive = false
+
+# ============================================================
+# 调试选项（生产环境建议关闭）
+# ============================================================
+[debug]
+# 日志级别：off, error, warn, info, debug, trace
+log_level = "warn"
+# 持久化日志（关闭后日志文件会在退出时删除）
+persistent_logging = false
+
+# ============================================================
+# 其他设置
+# ============================================================
+
+# Bell 设置
+[bell]
+animation = "Linear"
+color = "#ffffff"
+command = { program = "notify-send", args = ["--urgency=low", "Bell"] }

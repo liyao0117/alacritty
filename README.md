@@ -31,6 +31,10 @@ Join [`#alacritty`] on libera.chat if you have questions or looking for a quick 
 
 You can find an overview over the features available in Alacritty [here](./docs/features.md).
 
+### Buffer Fuzzy Search
+
+Quickly search and filter terminal buffer content using fuzzy matching. Press `Ctrl+Shift+T` to toggle, type your query, and navigate results with keyboard. Supports multiple match modes (fuzzy, substring, prefix, postfix, exact), case sensitivity toggle, multi-select, and column filtering. See [Buffer Fuzzy Search](./docs/features.md#buffer-fuzzy-search) for details.
+
 ## Further information
 
 - [Announcing Alacritty, a GPU-Accelerated Terminal Emulator](https://jwilm.io/blog/announcing-alacritty/) January 6, 2017

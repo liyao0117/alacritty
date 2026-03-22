@@ -58,10 +58,10 @@ use crate::display::hint::HintMatch;
 use crate::display::window::{ImeInhibitor, Window};
 use crate::display::{Display, Preedit, SizeInfo};
 use crate::input::{self, ActionContext as _, FONT_SIZE_STEP};
+#[cfg(unix)]
+use crate::ipc::{self, SocketReply};
 use crate::logging::{LOG_TARGET_CONFIG, LOG_TARGET_WINIT};
 use crate::message_bar::{Message, MessageBuffer};
-#[cfg(unix)]
-use crate::polling::ipc::{self, SocketReply};
 use crate::scheduler::{Scheduler, TimerId, Topic};
 use crate::window_context::WindowContext;
 
@@ -389,9 +389,6 @@ impl ApplicationHandler<Event> for Processor {
                     error!("Could not open window: {err:?}");
                 }
             },
-            // Shutdown all windows.
-            #[cfg(unix)]
-            (EventType::Shutdown, _) => event_loop.exit(),
             // Process events affecting all windows.
             (payload, None) => {
                 let event = WinitEvent::UserEvent(Event::new(payload, None));
@@ -553,8 +550,6 @@ pub enum EventType {
     BlinkCursor,
     BlinkCursorTimeout,
     SearchNext,
-    #[cfg(unix)]
-    Shutdown,
     Frame,
 }
 
@@ -1436,6 +1431,158 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
         *self.dirty = true;
     }
 
+    /// Start buffer fuzzy search mode.
+    #[inline]
+    fn start_buffer_fuzzy_search(&mut self) {
+        // Calculate max_display as half of screen height.
+        let screen_lines = self.size_info().screen_lines();
+        let max_display = (screen_lines / 2).max(5); // At least 5 lines
+        
+        // Apply case sensitivity setting from config.
+        let search_config = self.config.buffer_search_config();
+        self.terminal.buffer_fuzzy_search_update_config(search_config);
+        
+        self.terminal.start_buffer_fuzzy_search(max_display);
+        *self.dirty = true;
+        log::debug!("Buffer Fuzzy Search mode started (max_display={}, case_sensitive={})", 
+            max_display, search_config.case_sensitive);
+    }
+
+    /// Cancel buffer fuzzy search mode.
+    #[inline]
+    fn cancel_buffer_fuzzy_search(&mut self) {
+        self.terminal.cancel_buffer_fuzzy_search();
+        
+        // Clear message bar.
+        self.message_buffer.pop();
+        
+        self.display.damage_tracker.frame().mark_fully_damaged();
+        log::debug!("Buffer Fuzzy Search mode cancelled");
+    }
+
+    /// Input a character to buffer fuzzy search query.
+    #[inline]
+    fn buffer_fuzzy_search_input(&mut self, c: char) {
+        self.terminal.buffer_fuzzy_search_input(c);
+        *self.dirty = true;
+        // Update matches after input.
+        self.terminal.update_buffer_fuzzy_search_matches();
+        // Mark full damage to ensure complete redraw of the input bar.
+        self.display.damage_tracker.frame().mark_fully_damaged();
+        log::trace!("Buffer Fuzzy Search input: '{}'", c);
+    }
+
+    #[inline]
+    fn buffer_fuzzy_search_backspace(&mut self) {
+        self.terminal.buffer_fuzzy_search_backspace();
+        *self.dirty = true;
+        // Update matches after backspace.
+        self.terminal.update_buffer_fuzzy_search_matches();
+        // Mark full damage to ensure complete redraw of the input bar.
+        self.display.damage_tracker.frame().mark_fully_damaged();
+        log::trace!("Buffer Fuzzy Search backspace");
+    }
+
+    #[inline]
+    fn buffer_fuzzy_search_previous(&mut self) {
+        self.terminal.buffer_fuzzy_search_select_previous();
+        *self.dirty = true;
+        // Mark full damage to ensure complete redraw.
+        self.display.damage_tracker.frame().mark_fully_damaged();
+        log::trace!("Buffer Fuzzy Search select previous");
+    }
+
+    #[inline]
+    fn buffer_fuzzy_search_next(&mut self) {
+        self.terminal.buffer_fuzzy_search_select_next();
+        *self.dirty = true;
+        // Mark full damage to ensure complete redraw.
+        self.display.damage_tracker.frame().mark_fully_damaged();
+        log::trace!("Buffer Fuzzy Search select next");
+    }
+
+    #[inline]
+    fn buffer_fuzzy_search_confirm(&mut self) {
+        // Phase 4.1: Check if multi-select has selections
+        let selected_items = self.terminal.buffer_fuzzy_search_get_selected_items();
+        
+        if !selected_items.is_empty() {
+            // Multi-select: output all selected items with line continuation
+            let items = self.terminal.buffer_fuzzy_search_get_selected_content();
+            // Add line continuation (space + \) to all lines except the last
+            let output = if items.len() > 1 {
+                let mut lines = items.clone();
+                for i in 0..lines.len() - 1 {
+                    lines[i].push(' ');
+                    lines[i].push('\\');
+                }
+                lines.join("\n")
+            } else {
+                items.join("\n")
+            };
+            log::debug!("Buffer Fuzzy Search confirm (Enter): output {} selected items to PTY", selected_items.len());
+            
+            // Write to PTY BEFORE canceling mode
+            self.on_terminal_input_start();
+            // Write as-is with newlines and line continuations
+            self.write_to_pty(output.into_bytes());
+            
+            // Cancel fuzzy search mode after writing
+            self.cancel_buffer_fuzzy_search();
+        } else {
+            // Single select (no multi-selection): get selected line content (plain text)
+            let content = self.terminal.buffer_fuzzy_search_selected_match().map(|m| m.content.clone());
+            
+            // Write to PTY BEFORE canceling mode
+            if let Some(content) = content {
+                log::debug!("Buffer Fuzzy Search confirm (Enter): insert '{}' to PTY", content);
+                // Signal typing start and write to PTY (like paste does)
+                self.on_terminal_input_start();
+                // Write as-is (preserve original line endings)
+                self.write_to_pty(content.into_bytes());
+            }
+            
+            // Cancel fuzzy search mode after writing
+            self.cancel_buffer_fuzzy_search();
+        }
+    }
+    
+    #[inline]
+    fn buffer_fuzzy_search_cancel(&mut self) {
+        // Escape key: just cancel fuzzy search mode, return to normal mode.
+        // Does NOT enter Vi mode. User can press Vi mode key binding (Ctrl+Shift+Space by default)
+        // to enter Vi mode manually if needed.
+        log::debug!("Buffer Fuzzy Search cancel (Escape): cancel search mode only");
+        self.cancel_buffer_fuzzy_search();
+    }
+
+    #[inline]
+    fn update_buffer_fuzzy_search_matches(&mut self) {
+        self.terminal.update_buffer_fuzzy_search_matches();
+        *self.dirty = true;
+    }
+
+    /// Check if buffer fuzzy search is active.
+    #[inline]
+    fn buffer_fuzzy_search_active(&self) -> bool {
+        self.terminal.buffer_fuzzy_search_active()
+    }
+
+    // Phase 4.1: Multi-select
+    #[inline]
+    fn buffer_fuzzy_search_toggle_selection(&mut self) {
+        self.terminal.buffer_fuzzy_search_toggle_selection();
+        *self.dirty = true;
+        log::trace!("Buffer Fuzzy Search toggle selection");
+    }
+
+    #[inline]
+    fn buffer_fuzzy_search_select_all(&mut self) {
+        self.terminal.buffer_fuzzy_search_select_all();
+        *self.dirty = true;
+        log::trace!("Buffer Fuzzy Search select all");
+    }
+
     /// Get vi inline search state.
     fn inline_search_state(&mut self) -> &mut InlineSearchState {
         self.inline_search_state
@@ -1459,6 +1606,43 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
     fn inline_search_previous(&mut self) {
         let direction = self.inline_search_state.direction.opposite();
         self.inline_search(direction);
+    }
+
+    /// Scroll to a specific line number and set vi cursor there.
+    fn scroll_to_line(&mut self, line_number: usize) {
+        let grid = self.terminal.grid();
+        let screen_lines = grid.screen_lines();
+        let total_lines = grid.total_lines();
+        let display_offset = grid.display_offset();
+        
+        // line_number is the absolute index from extractor (0 = top of scrollback).
+        // The grid uses Line coordinates where:
+        //   - Negative values are scrollback lines
+        //   - 0 to (screen_lines-1) are viewport lines
+        //   - Total lines = scrollback + screen_lines
+        //
+        // If line_number < scrollback_count, it's in scrollback (negative Line).
+        // If line_number >= scrollback_count, it's in viewport.
+        let scrollback_count = total_lines.saturating_sub(screen_lines);
+        let viewport_line = line_number as i32 - scrollback_count as i32;
+        
+        let point = Point::new(Line(viewport_line), Column(0));
+        
+        log::debug!(
+            "scroll_to_line: line_number={}, scrollback_count={}, screen_lines={}, total_lines={}, display_offset={}, viewport_line={:?}",
+            line_number, scrollback_count, screen_lines, total_lines, display_offset, viewport_line
+        );
+        
+        // Scroll viewport to show the line.
+        self.terminal.scroll_to_point(point);
+        
+        // Set vi cursor to the line (if in Vi mode).
+        if self.terminal.mode().contains(TermMode::VI) {
+            self.terminal.vi_mode_cursor.point = point;
+            log::debug!("scroll_to_line: vi cursor set to {:?}", point);
+        }
+        
+        *self.dirty = true;
     }
 
     /// Process input during inline search.
@@ -1927,9 +2111,16 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                     TerminalEvent::MouseCursorDirty => self.reset_mouse_cursor(),
                     TerminalEvent::CursorBlinkingChange => self.ctx.update_cursor_blinking(),
                     TerminalEvent::Exit | TerminalEvent::ChildExit(_) | TerminalEvent::Wakeup => (),
+                    // Buffer fuzzy search events - trigger redraw.
+                    TerminalEvent::BufferFuzzySearchStateChange 
+                    | TerminalEvent::BufferFuzzySearchQueryUpdate 
+                    | TerminalEvent::BufferFuzzySearchMatchesUpdate 
+                    | TerminalEvent::BufferFuzzySearchSelectionUpdate => {
+                        *self.ctx.dirty = true;
+                    },
                 },
                 #[cfg(unix)]
-                EventType::IpcConfig(_) | EventType::IpcGetConfig(..) | EventType::Shutdown => (),
+                EventType::IpcConfig(_) | EventType::IpcGetConfig(..) => (),
                 EventType::Message(_)
                 | EventType::ConfigReload(_)
                 | EventType::CreateWindow(_)
@@ -2018,8 +2209,19 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                     WindowEvent::Ime(ime) => match ime {
                         Ime::Commit(text) => {
                             *self.ctx.dirty = true;
-                            // Don't use bracketed paste for single char input.
-                            self.ctx.paste(&text, text.chars().count() > 1);
+                            
+                            // In Buffer Fuzzy Search mode, send input to search query instead of PTY.
+                            if self.ctx.terminal().mode().contains(TermMode::BUFFER_FUZZY_SEARCH) {
+                                for character in text.chars() {
+                                    self.ctx.buffer_fuzzy_search_input(character);
+                                }
+                                // Update matches after IME commit.
+                                self.ctx.update_buffer_fuzzy_search_matches();
+                            } else {
+                                // Don't use bracketed paste for single char input.
+                                self.ctx.paste(&text, text.chars().count() > 1);
+                            }
+                            
                             self.ctx.update_cursor_blinking();
                         },
                         Ime::Preedit(text, cursor_offset) => {

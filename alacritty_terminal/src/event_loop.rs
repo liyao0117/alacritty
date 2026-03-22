@@ -260,7 +260,7 @@ where
                                 self.pty.next_child_event()
                             {
                                 if let Some(status) = status {
-                                    self.event_proxy.send_event(Event::ChildExit(status));
+                                    self.event_proxy.send_event(Event::ChildExit(status.code().unwrap_or(-1)));
                                 }
                                 if self.drain_on_exit {
                                     let _ = self.pty_read(&mut state, &mut buf, pipe.as_mut());

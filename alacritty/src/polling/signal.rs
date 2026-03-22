@@ -7,6 +7,7 @@ use signal_hook::consts::{SIGINT, SIGTERM};
 use signal_hook::low_level::pipe;
 use winit::event_loop::EventLoopProxy;
 
+use alacritty_terminal::event::Event as TerminalEvent;
 use crate::event::{Event, EventType};
 
 pub struct SignalListener {
@@ -26,7 +27,7 @@ impl SignalListener {
     /// Process the next signal.
     pub fn process_signal(&mut self) -> Result<(), IoError> {
         // Submit shutdown request to the main event loop.
-        let event = Event::new(EventType::Shutdown, None);
+        let event = Event::new(EventType::Terminal(TerminalEvent::Exit), None);
         let _ = self.event_proxy.send_event(event);
 
         // Ensure signal is drained from pipe.

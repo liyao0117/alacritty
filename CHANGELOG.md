@@ -8,9 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Notable changes to the `alacritty_terminal` crate are documented in its
 [CHANGELOG](./alacritty_terminal/CHANGELOG.md).
 
-## 0.18.0-dev
-
-## 0.17.0
+## 0.17.0-dev
 
 ### Packaging
 
@@ -23,6 +21,7 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 - Ability to bind `WheelUp` and `WheelDown` in `mouse.bindings`
 - Support TOML 1.1 syntax
 - `window.resize_increments` support on Wayland
+- Buffer Fuzzy Search mode for intelligent terminal buffer searching with nucleo-matcher
 
 ### Changed
 

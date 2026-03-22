@@ -34,6 +34,7 @@ use crate::config::scrolling::Scrolling;
 use crate::config::selection::Selection;
 use crate::config::terminal::Terminal;
 use crate::config::window::WindowConfig;
+use alacritty_terminal::term::buffer_search::matcher::SearchConfig as BufferSearchConfig;
 
 /// Regex used for the default URL hint.
 #[rustfmt::skip]
@@ -86,6 +87,9 @@ pub struct UiConfig {
     /// Config for the alacritty_terminal itself.
     pub terminal: Terminal,
 
+    /// Buffer search configuration.
+    pub buffer_search: BufferSearchConfigSection,
+
     /// Keyboard configuration.
     keyboard: Keyboard,
 
@@ -125,6 +129,96 @@ impl UiConfig {
             osc52: self.terminal.osc52.0,
             kitty_keyboard: true,
         }
+    }
+
+    /// Get buffer search config.
+    pub fn buffer_search_config(&self) -> BufferSearchConfig {
+        BufferSearchConfig::from(&self.buffer_search)
+    }
+
+    /// Apply buffer search toggle key binding from configuration.
+    pub fn apply_buffer_search_binding(&mut self) {
+        use crate::config::bindings::{Action, BindingKey, BindingMode, KeyBinding, KeyLocation};
+        use winit::keyboard::{Key, ModifiersState};
+        
+        // Parse the toggle_key string (e.g., "Ctrl+Shift+F")
+        let toggle_key = &self.buffer_search.toggle_key;
+        
+        // Parse modifiers and key from the string
+        let parts: Vec<&str> = toggle_key.split('+').collect();
+        let mut mods = ModifiersState::empty();
+        let mut key_str = "";
+        
+        for part in parts {
+            match part.trim().to_lowercase().as_str() {
+                "ctrl" | "control" => mods |= ModifiersState::CONTROL,
+                "shift" => mods |= ModifiersState::SHIFT,
+                "alt" => mods |= ModifiersState::ALT,
+                "super" | "win" | "command" => mods |= ModifiersState::SUPER,
+                _ => key_str = part.trim(),
+            }
+        }
+        
+        // Parse the key - letters and numbers use Character, special keys use NamedKey
+        let key_val = match key_str {
+            "F" | "f" => Key::Character("f".into()),
+            "A" | "a" => Key::Character("a".into()),
+            "B" | "b" => Key::Character("b".into()),
+            "C" | "c" => Key::Character("c".into()),
+            "D" | "d" => Key::Character("d".into()),
+            "E" | "e" => Key::Character("e".into()),
+            "G" | "g" => Key::Character("g".into()),
+            "H" | "h" => Key::Character("h".into()),
+            "I" | "i" => Key::Character("i".into()),
+            "J" | "j" => Key::Character("j".into()),
+            "K" | "k" => Key::Character("k".into()),
+            "L" | "l" => Key::Character("l".into()),
+            "M" | "m" => Key::Character("m".into()),
+            "N" | "n" => Key::Character("n".into()),
+            "O" | "o" => Key::Character("o".into()),
+            "P" | "p" => Key::Character("p".into()),
+            "Q" | "q" => Key::Character("q".into()),
+            "R" | "r" => Key::Character("r".into()),
+            "S" | "s" => Key::Character("s".into()),
+            "T" | "t" => Key::Character("t".into()),
+            "U" | "u" => Key::Character("u".into()),
+            "V" | "v" => Key::Character("v".into()),
+            "W" | "w" => Key::Character("w".into()),
+            "X" | "x" => Key::Character("x".into()),
+            "Y" | "y" => Key::Character("y".into()),
+            "Z" | "z" => Key::Character("z".into()),
+            "0" => Key::Character("0".into()),
+            "1" => Key::Character("1".into()),
+            "2" => Key::Character("2".into()),
+            "3" => Key::Character("3".into()),
+            "4" => Key::Character("4".into()),
+            "5" => Key::Character("5".into()),
+            "6" => Key::Character("6".into()),
+            "7" => Key::Character("7".into()),
+            "8" => Key::Character("8".into()),
+            "9" => Key::Character("9".into()),
+            _ => Key::Character(key_str.to_lowercase().into()),
+        };
+        
+        // Create the binding using Keycode format
+        let new_binding = KeyBinding {
+            trigger: BindingKey::Keycode { key: key_val.clone(), location: KeyLocation::Any },
+            mods: mods,
+            action: Action::StartBufferFuzzySearch,
+            mode: BindingMode::empty(),
+            notmode: BindingMode::empty(),  // Remove the notmode restriction to allow toggle
+        };
+        
+        // Remove ALL StartBufferFuzzySearch bindings to avoid conflicts
+        // This allows the config to fully override the default binding
+        self.keyboard.bindings.0.retain(|b| {
+            !matches!(b.action, Action::StartBufferFuzzySearch)
+        });
+        
+        // Add the new binding from config
+        self.keyboard.bindings.0.push(new_binding);
+        
+        eprintln!("DEBUG: Applied buffer search binding: key={:?}, mods={:?}", key_val, mods);
     }
 
     /// Derive [`PtyOptions`] from the config.
@@ -675,6 +769,30 @@ impl serde::de::Visitor<'_> for StringVisitor {
         E: serde::de::Error,
     {
         Ok(s.to_lowercase())
+    }
+}
+
+/// Buffer search configuration section.
+#[derive(ConfigDeserialize, Default, Clone, Debug, PartialEq, Serialize)]
+pub struct BufferSearchConfigSection {
+    /// Whether search is case sensitive (default: false).
+    pub case_sensitive: bool,
+    
+    /// Key binding to toggle buffer search mode (default: Ctrl+Shift+F).
+    #[serde(default = "default_buffer_search_key")]
+    pub toggle_key: String,
+}
+
+#[allow(dead_code)]  // Used by serde default attribute
+fn default_buffer_search_key() -> String {
+    "Ctrl+Shift+T".to_string()
+}
+
+impl From<&BufferSearchConfigSection> for BufferSearchConfig {
+    fn from(config: &BufferSearchConfigSection) -> Self {
+        BufferSearchConfig {
+            case_sensitive: config.case_sensitive,
+        }
     }
 }
 

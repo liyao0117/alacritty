@@ -20,13 +20,29 @@ use crate::scheduler::{TimerId, Topic};
 impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
     /// Process key input.
     pub fn key_input(&mut self, key: KeyEvent) {
-        // IME input will be applied on commit and shouldn't trigger key bindings.
-        if self.ctx.display().ime.preedit().is_some() {
-            return;
-        }
-
         let mode = *self.ctx.terminal().mode();
         let mods = self.ctx.modifiers().state();
+
+        // IME input will be applied on commit and shouldn't trigger key bindings.
+        // Exception: Buffer Fuzzy Search mode should handle IME input.
+        if self.ctx.display().ime.preedit().is_some() {
+            // In Buffer Fuzzy Search mode, handle IME input.
+            if mode.contains(TermMode::BUFFER_FUZZY_SEARCH) {
+                if key.state == ElementState::Pressed {
+                    let text = key.text_with_all_modifiers().unwrap_or_default();
+                    for character in text.chars() {
+                        // Filter out control characters.
+                        if character >= '\x20' && character != '\x7F' {
+                            self.ctx.buffer_fuzzy_search_input(character);
+                        }
+                    }
+                    // Update matches after IME input.
+                    self.ctx.update_buffer_fuzzy_search_matches();
+                }
+                return;
+            }
+            return;
+        }
 
         if key.state == ElementState::Released {
             if self.ctx.inline_search_state().char_pending {
@@ -66,6 +82,36 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
                 self.ctx.search_input(character);
             }
 
+            return;
+        }
+
+        // Buffer fuzzy search mode input handling.
+        // Check bindings first (for Tab, Ctrl+A, etc.), then handle character input.
+        if mode.contains(TermMode::BUFFER_FUZZY_SEARCH) {
+            // Bindings were already checked above, if we reach here no binding matched.
+            // Now handle character input for the search query.
+            
+            // Skip modifier-only keys (Ctrl, Shift, Alt, Super) - they don't produce text.
+            // Also skip navigation keys that should be handled by bindings.
+            let is_modifier_only = matches!(
+                key.logical_key.as_ref(),
+                Key::Named(NamedKey::Shift)
+                    | Key::Named(NamedKey::Control)
+                    | Key::Named(NamedKey::Alt)
+                    | Key::Named(NamedKey::Super)
+            );
+            
+            if !is_modifier_only {
+                for character in text.chars() {
+                    // Filter out control characters (0x00-0x1F and 0x7F).
+                    // These are produced by Ctrl+ combinations and shouldn't be part of the query.
+                    if character >= '\x20' && character != '\x7F' {
+                        self.ctx.buffer_fuzzy_search_input(character);
+                    }
+                }
+                // Update matches after query change.
+                self.ctx.update_buffer_fuzzy_search_matches();
+            }
             return;
         }
 

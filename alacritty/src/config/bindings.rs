@@ -238,6 +238,32 @@ pub enum Action {
     /// Toggle vi mode.
     ToggleViMode,
 
+    /// Start buffer fuzzy search mode.
+    StartBufferFuzzySearch,
+
+    /// Cancel buffer fuzzy search mode.
+    CancelBufferFuzzySearch,
+
+    /// Backspace in buffer fuzzy search mode.
+    BufferFuzzySearchBackspace,
+
+    /// Select previous match in buffer fuzzy search (Phase 2).
+    BufferFuzzySearchPrevious,
+
+    /// Select next match in buffer fuzzy search (Phase 2).
+    BufferFuzzySearchNext,
+
+    /// Confirm selection in buffer fuzzy search (Phase 2).
+    BufferFuzzySearchConfirm,
+
+    // ========== Phase 4.1: Multi-select ==========
+
+    /// Toggle selection for current match in buffer fuzzy search (Phase 4.1).
+    BufferFuzzySearchToggleSelection,
+
+    /// Select all matches in buffer fuzzy search (Phase 4.1).
+    BufferFuzzySearchSelectAll,
+
     /// Allow receiving char input.
     ReceiveChar,
 
@@ -454,74 +480,75 @@ pub fn default_key_bindings() -> Vec<KeyBinding> {
         F4,         ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x1bOS".into());
         Tab,       ModifiersState::SHIFT,   ~BindingMode::VI,   ~BindingMode::SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x1b[Z".into());
         Tab,       ModifiersState::SHIFT | ModifiersState::ALT, ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x1b\x1b[Z".into());
-        Backspace, ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC; Action::Esc("\x7f".into());
-        Backspace, ModifiersState::ALT,     ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x1b\x7f".into());
-        Backspace, ModifiersState::SHIFT,   ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x7f".into());
+        Backspace, ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC; Action::Esc("\x7f".into());
+        Backspace, ModifiersState::ALT,     ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x1b\x7f".into());
+        Backspace, ModifiersState::SHIFT,   ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\x7f".into());
         Enter => KeyLocation::Numpad, ~BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::REPORT_ALL_KEYS_AS_ESC, ~BindingMode::DISAMBIGUATE_ESC_CODES; Action::Esc("\n".into());
         // Vi mode.
+        // ToggleViMode can be used in BUFFER_FUZZY_SEARCH mode to exit it first.
         Space, ModifiersState::SHIFT | ModifiersState::CONTROL, ~BindingMode::SEARCH; Action::ToggleViMode;
-        Space, ModifiersState::SHIFT | ModifiersState::CONTROL, +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollToBottom;
-        Escape,                             +BindingMode::VI, ~BindingMode::SEARCH; Action::ClearSelection;
-        "i",                                +BindingMode::VI, ~BindingMode::SEARCH; Action::ToggleViMode;
-        "i",                                +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollToBottom;
-        "c",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH; Action::ToggleViMode;
-        "y",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollLineUp;
-        "e",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollLineDown;
-        "g",                                +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollToTop;
-        "g",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollToBottom;
-        "b",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollPageUp;
-        "f",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollPageDown;
-        "u",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollHalfPageUp;
-        "d",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH; Action::ScrollHalfPageDown;
-        "y",                                +BindingMode::VI, ~BindingMode::SEARCH; Action::Copy;
-        "y",                                +BindingMode::VI, ~BindingMode::SEARCH; Action::ClearSelection;
-        "/",                                +BindingMode::VI, ~BindingMode::SEARCH; Action::SearchForward;
-        "?",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; Action::SearchBackward;
-        "y",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViAction::ToggleNormalSelection;
-        "y",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Last;
-        "y",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; Action::Copy;
-        "y",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; Action::ClearSelection;
-        "v",                                +BindingMode::VI, ~BindingMode::SEARCH; ViAction::ToggleNormalSelection;
-        "v",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViAction::ToggleLineSelection;
-        "v",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH; ViAction::ToggleBlockSelection;
-        "v",      ModifiersState::ALT,      +BindingMode::VI, ~BindingMode::SEARCH; ViAction::ToggleSemanticSelection;
-        "n",                                +BindingMode::VI, ~BindingMode::SEARCH; ViAction::SearchNext;
-        "n",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViAction::SearchPrevious;
-        Enter,                              +BindingMode::VI, ~BindingMode::SEARCH; ViAction::Open;
-        "z",                                +BindingMode::VI, ~BindingMode::SEARCH; ViAction::CenterAroundViCursor;
-        "f",                                +BindingMode::VI, ~BindingMode::SEARCH; ViAction::InlineSearchForward;
-        "f",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViAction::InlineSearchBackward;
-        "t",                                +BindingMode::VI, ~BindingMode::SEARCH; ViAction::InlineSearchForwardShort;
-        "t",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViAction::InlineSearchBackwardShort;
-        ";",                                +BindingMode::VI, ~BindingMode::SEARCH; ViAction::InlineSearchNext;
-        ",",                                +BindingMode::VI, ~BindingMode::SEARCH; ViAction::InlineSearchPrevious;
-        "*",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViAction::SemanticSearchForward;
-        "#",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViAction::SemanticSearchBackward;
-        "k",                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Up;
-        "j",                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Down;
-        "h",                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Left;
-        "l",                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Right;
-        ArrowUp,                            +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Up;
-        ArrowDown,                          +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Down;
-        ArrowLeft,                          +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Left;
-        ArrowRight,                         +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Right;
-        "0",                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::First;
-        "$",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Last;
-        Home,                               +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::First;
-        End,                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Last;
-        "^",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::FirstOccupied;
-        "h",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::High;
-        "m",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Middle;
-        "l",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Low;
-        "b",                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::SemanticLeft;
-        "w",                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::SemanticRight;
-        "e",                                +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::SemanticRightEnd;
-        "b",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::WordLeft;
-        "w",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::WordRight;
-        "e",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::WordRightEnd;
-        "%",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::Bracket;
-        "{",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::ParagraphUp;
-        "}",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH; ViMotion::ParagraphDown;
+        Space, ModifiersState::SHIFT | ModifiersState::CONTROL, +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollToBottom;
+        Escape,                             +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ClearSelection;
+        "i",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ToggleViMode;
+        "i",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollToBottom;
+        "c",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ToggleViMode;
+        "y",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollLineUp;
+        "e",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollLineDown;
+        "g",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollToTop;
+        "g",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollToBottom;
+        "b",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollPageUp;
+        "f",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollPageDown;
+        "u",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollHalfPageUp;
+        "d",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ScrollHalfPageDown;
+        "y",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::Copy;
+        "y",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ClearSelection;
+        "/",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::SearchForward;
+        "?",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::SearchBackward;
+        "y",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::ToggleNormalSelection;
+        "y",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Last;
+        "y",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::Copy;
+        "y",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ClearSelection;
+        "v",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::ToggleNormalSelection;
+        "v",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::ToggleLineSelection;
+        "v",      ModifiersState::CONTROL,  +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::ToggleBlockSelection;
+        "v",      ModifiersState::ALT,      +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::ToggleSemanticSelection;
+        "n",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::SearchNext;
+        "n",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::SearchPrevious;
+        Enter,                              +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::Open;
+        "z",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::CenterAroundViCursor;
+        "f",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::InlineSearchForward;
+        "f",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::InlineSearchBackward;
+        "t",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::InlineSearchForwardShort;
+        "t",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::InlineSearchBackwardShort;
+        ";",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::InlineSearchNext;
+        ",",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::InlineSearchPrevious;
+        "*",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::SemanticSearchForward;
+        "#",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViAction::SemanticSearchBackward;
+        "k",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Up;
+        "j",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Down;
+        "h",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Left;
+        "l",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Right;
+        ArrowUp,                            +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Up;
+        ArrowDown,                          +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Down;
+        ArrowLeft,                          +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Left;
+        ArrowRight,                         +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Right;
+        "0",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::First;
+        "$",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Last;
+        Home,                               +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::First;
+        End,                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Last;
+        "^",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::FirstOccupied;
+        "h",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::High;
+        "m",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Middle;
+        "l",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Low;
+        "b",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::SemanticLeft;
+        "w",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::SemanticRight;
+        "e",                                +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::SemanticRightEnd;
+        "b",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::WordLeft;
+        "w",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::WordRight;
+        "e",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::WordRightEnd;
+        "%",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::Bracket;
+        "{",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::ParagraphUp;
+        "}",      ModifiersState::SHIFT,    +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; ViMotion::ParagraphDown;
         Enter,                              +BindingMode::VI, +BindingMode::SEARCH; SearchAction::SearchConfirm;
         // Plain search.
         Escape,                             +BindingMode::SEARCH; SearchAction::SearchCancel;
@@ -534,6 +561,20 @@ pub fn default_key_bindings() -> Vec<KeyBinding> {
         ArrowDown,                          +BindingMode::SEARCH; SearchAction::SearchHistoryNext;
         Enter,                              +BindingMode::SEARCH, ~BindingMode::VI; SearchAction::SearchFocusNext;
         Enter, ModifiersState::SHIFT,       +BindingMode::SEARCH, ~BindingMode::VI; SearchAction::SearchFocusPrevious;
+        // Buffer fuzzy search mode.
+        // Note: The actual toggle key binding is applied from config in apply_buffer_search_binding().
+        // This default binding is kept for fallback but will be overridden by config.
+        Escape,                             +BindingMode::BUFFER_FUZZY_SEARCH; Action::CancelBufferFuzzySearch;
+        Backspace,                          +BindingMode::BUFFER_FUZZY_SEARCH; Action::BufferFuzzySearchBackspace;
+        // Phase 2: Navigation.
+        ArrowUp,                            +BindingMode::BUFFER_FUZZY_SEARCH; Action::BufferFuzzySearchPrevious;
+        ArrowDown,                          +BindingMode::BUFFER_FUZZY_SEARCH; Action::BufferFuzzySearchNext;
+        Enter,                              +BindingMode::BUFFER_FUZZY_SEARCH; Action::BufferFuzzySearchConfirm;
+        "p",      ModifiersState::CONTROL,  +BindingMode::BUFFER_FUZZY_SEARCH; Action::BufferFuzzySearchPrevious;
+        "n",      ModifiersState::CONTROL,  +BindingMode::BUFFER_FUZZY_SEARCH; Action::BufferFuzzySearchNext;
+        // Phase 4.1: Multi-select.
+        Tab,                                +BindingMode::BUFFER_FUZZY_SEARCH; Action::BufferFuzzySearchToggleSelection;
+        "a",      ModifiersState::CONTROL,  +BindingMode::BUFFER_FUZZY_SEARCH; Action::BufferFuzzySearchSelectAll;
     );
 
     bindings.extend(platform_key_bindings());
@@ -551,7 +592,7 @@ fn common_keybindings() -> Vec<KeyBinding> {
         "b",    ModifiersState::CONTROL | ModifiersState::SHIFT, ~BindingMode::SEARCH;                   Action::SearchBackward;
         Insert, ModifiersState::SHIFT,                           ~BindingMode::VI;                       Action::PasteSelection;
         "c",    ModifiersState::CONTROL | ModifiersState::SHIFT;                                         Action::Copy;
-        "c",    ModifiersState::CONTROL | ModifiersState::SHIFT, +BindingMode::VI, ~BindingMode::SEARCH; Action::ClearSelection;
+        "c",    ModifiersState::CONTROL | ModifiersState::SHIFT, +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ClearSelection;
         "0",    ModifiersState::CONTROL;                                                                 Action::ResetFontSize;
         "=",    ModifiersState::CONTROL;                                                                 Action::IncreaseFontSize;
         "+",    ModifiersState::CONTROL;                                                                 Action::IncreaseFontSize;
@@ -607,7 +648,7 @@ pub fn platform_key_bindings() -> Vec<KeyBinding> {
         "n",    ModifiersState::SUPER;                                         Action::CreateNewWindow;
         "f",    ModifiersState::CONTROL | ModifiersState::SUPER;               Action::ToggleFullscreen;
         "c",    ModifiersState::SUPER;                                         Action::Copy;
-        "c",    ModifiersState::SUPER, +BindingMode::VI, ~BindingMode::SEARCH; Action::ClearSelection;
+        "c",    ModifiersState::SUPER, +BindingMode::VI, ~BindingMode::SEARCH, ~BindingMode::BUFFER_FUZZY_SEARCH; Action::ClearSelection;
         "h",    ModifiersState::SUPER;                                         Action::Hide;
         "h",    ModifiersState::SUPER   | ModifiersState::ALT;                 Action::HideOtherApplications;
         "m",    ModifiersState::SUPER;                                         Action::Minimize;
@@ -764,8 +805,9 @@ bitflags! {
         const ALT_SCREEN             = 0b0000_0100;
         const VI                     = 0b0000_1000;
         const SEARCH                 = 0b0001_0000;
-        const DISAMBIGUATE_ESC_CODES = 0b0010_0000;
-        const REPORT_ALL_KEYS_AS_ESC = 0b0100_0000;
+        const BUFFER_FUZZY_SEARCH    = 0b0010_0000;
+        const DISAMBIGUATE_ESC_CODES = 0b0100_0000;
+        const REPORT_ALL_KEYS_AS_ESC = 0b1000_0000;
     }
 }
 
@@ -777,6 +819,10 @@ impl BindingMode {
         binding_mode.set(BindingMode::ALT_SCREEN, mode.contains(TermMode::ALT_SCREEN));
         binding_mode.set(BindingMode::VI, mode.contains(TermMode::VI));
         binding_mode.set(BindingMode::SEARCH, search);
+        binding_mode.set(
+            BindingMode::BUFFER_FUZZY_SEARCH,
+            mode.contains(TermMode::BUFFER_FUZZY_SEARCH),
+        );
         binding_mode.set(
             BindingMode::DISAMBIGUATE_ESC_CODES,
             mode.contains(TermMode::DISAMBIGUATE_ESC_CODES),
